@@ -3,3 +3,7 @@ uvicorn
 psycopg2-binary
 python-jose
 passlib[bcrypt]
+python-multipart
+pydantic
+PyJWT==2.9.0
+python-dotenv
