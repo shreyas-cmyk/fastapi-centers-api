@@ -30,14 +30,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-
+# Utility functions
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
-
 
 def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
     to_encode = data.copy()
@@ -48,22 +46,19 @@ def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] 
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
 def get_user(email: str):
     with psycopg2.connect(**DB_CONFIG) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE email = %s", (email,))
             return cur.fetchone()
 
-
 def authenticate_user(email: str, password: str):
     user = get_user(email)
     if not user:
         return False
-    if not verify_password(password, user["password"]):
+    if not verify_password(password, user["hashed_password"]):  # ✅ fixed
         return False
     return user
-
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -83,11 +78,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     return user
 
-
+# Schemas
 class UserCreate(BaseModel):
     email: str
     password: str
 
+# Routes
 @app.post("/register")
 async def register(user: UserCreate):
     try:
@@ -99,9 +95,13 @@ async def register(user: UserCreate):
                 if cur.fetchone():
                     raise HTTPException(status_code=400, detail="User already exists")
 
-                # Insert new user
+                # Insert new user into hashed_password column
                 cur.execute(
-                    "INSERT INTO users (email, password) VALUES (%s, %s) RETURNING id, email",
+                    """
+                    INSERT INTO users (email, hashed_password)
+                    VALUES (%s, %s)
+                    RETURNING id, email, created_at
+                    """,
                     (user.email, hashed_password)
                 )
                 new_user = cur.fetchone()
@@ -110,9 +110,7 @@ async def register(user: UserCreate):
         return {"message": "User created successfully", "user": new_user}
 
     except psycopg2.Error as e:
-        # Capture DB errors and return as HTTP error instead of 500
         raise HTTPException(status_code=500, detail=f"Database error: {e.pgerror}")
-
 
 @app.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -124,7 +122,6 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         data={"sub": user["email"]}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
-
 
 @app.get("/centers")
 async def get_centers(
@@ -172,7 +169,6 @@ async def get_centers(
             results = cur.fetchall()
 
     return {"count": len(results), "results": results}
-
 
 @app.get("/")
 def read_root():
