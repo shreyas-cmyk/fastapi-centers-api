@@ -84,27 +84,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return user
 
 
-# 🟢 Pydantic model for incoming JSON
 class UserCreate(BaseModel):
     email: str
     password: str
 
-
-# 🟢 Updated register endpoint (accepts JSON body)
 @app.post("/register")
 async def register(user: UserCreate):
-    hashed_password = get_password_hash(user.password)
-    with psycopg2.connect(**DB_CONFIG) as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE email = %s", (user.email,))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="User already exists")
-            cur.execute(
-                "INSERT INTO users (email, password) VALUES (%s, %s) RETURNING *",
-                (user.email, hashed_password),
-            )
-            conn.commit()
-            return {"message": "User created successfully"}
+    try:
+        hashed_password = get_password_hash(user.password)
+        with psycopg2.connect(**DB_CONFIG) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Check if user already exists
+                cur.execute("SELECT 1 FROM users WHERE email = %s", (user.email,))
+                if cur.fetchone():
+                    raise HTTPException(status_code=400, detail="User already exists")
+
+                # Insert new user
+                cur.execute(
+                    "INSERT INTO users (email, password) VALUES (%s, %s) RETURNING id, email",
+                    (user.email, hashed_password)
+                )
+                new_user = cur.fetchone()
+                conn.commit()
+
+        return {"message": "User created successfully", "user": new_user}
+
+    except psycopg2.Error as e:
+        # Capture DB errors and return as HTTP error instead of 500
+        raise HTTPException(status_code=500, detail=f"Database error: {e.pgerror}")
 
 
 @app.post("/token")
