@@ -6,18 +6,21 @@ import datetime
 from typing import Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import bcrypt
+from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 
 app = FastAPI(title="Centers API", description="Search centers by company name, center name, or unique key.", version="1.0")
 
 DB_CONFIG = {
-    "dbname": "YOUR_DBNAME",
-    "user": "YOUR_DBUSER",
-    "password": "YOUR_DBPASSWORD",
-    "host": "YOUR_DBHOST",
+    "dbname": "neondb",
+    "user": "neondb_owner",
+    "password": "npg_8ykcVJYtDw9R",
+    "host": "ep-royal-pond-a1oahaiz-pooler.ap-southeast-1.aws.neon.tech",
     "port": "5432"
 }
 
-SECRET_KEY = "YOUR_SECRET_KEY"
+SECRET_KEY = "supersecretkey"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -142,3 +145,7 @@ async def get_centers(
             results = cur.fetchall()
 
     return {"count": len(results), "results": results}
+
+@app.get("/")
+def read_root():
+    return JSONResponse(content={"message": "FastAPI Accounts API is running!"})
